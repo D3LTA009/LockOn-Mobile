@@ -1,3 +1,4 @@
+warn("Lock On carregado")
 --[[ 
  LockOn Mobile - estilo console
  by D3LTA
