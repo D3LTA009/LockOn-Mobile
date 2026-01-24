@@ -1,28 +1,28 @@
-warn("Lock On carregado")
---[[ 
- LockOn Mobile - estilo console
- by D3LTA
-]]
+-- LockOn Mobile - estilo console (FINAL)
+-- by D3LTA
 
--- CONFIG
+warn("[LockOn] Script carregando...")
+
+-- ================= CONFIG =================
 local LOCK_RANGE = 200
-local SMOOTHNESS = 0.18 -- quanto menor, mais preciso
+local SMOOTHNESS = 0.15 -- menor = acompanha dash melhor
 local IGNORE_TODO_ULT = true
 
--- SERVICES
+-- ================= SERVICES =================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Camera = workspace.CurrentCamera
 
 local LocalPlayer = Players.LocalPlayer
-local Mouse = LocalPlayer:GetMouse()
 
--- STATE
+repeat task.wait() until LocalPlayer.Character
+
+-- ================= STATE =================
 local LockedTarget = nil
 local LockEnabled = false
 
--- FUNÇÕES AUXILIARES
+-- ================= FUNÇÕES =================
 
 local function isSameTeam(player)
     if not player or not player.Team or not LocalPlayer.Team then return false end
@@ -30,11 +30,14 @@ local function isSameTeam(player)
 end
 
 local function isTodoUlt(character)
-    if not IGNORE_TODO_ULT then return false end
-    if not character then return false end
+    if not IGNORE_TODO_ULT or not character then return false end
 
-    -- ajuste esse nome se no seu jogo for diferente
-    return character:FindFirstChild("TodoUlt") 
+    -- nomes comuns de NPC / ult
+    if character.Name and character.Name:lower():find("todo") then
+        return true
+    end
+
+    return character:FindFirstChild("TodoUlt")
         or character:FindFirstChild("IceDomain")
         or character:FindFirstChild("UltActive")
 end
@@ -45,17 +48,16 @@ local function isValidTarget(model)
 
     local humanoid = model:FindFirstChildOfClass("Humanoid")
     local root = model:FindFirstChild("HumanoidRootPart")
+
     if not humanoid or humanoid.Health <= 0 or not root then
         return false
     end
 
-    -- Player check
     local player = Players:GetPlayerFromCharacter(model)
-    if player then
-        if isSameTeam(player) then return false end
+    if player and isSameTeam(player) then
+        return false
     end
 
-    -- Ignorar ult do Todo
     if isTodoUlt(model) then
         return false
     end
@@ -83,38 +85,25 @@ local function getClosestTarget()
     return closest
 end
 
--- LOCK SYSTEM
+-- ================= CAMERA LOCK =================
 RunService.RenderStepped:Connect(function()
     if LockEnabled and LockedTarget and LockedTarget:FindFirstChild("HumanoidRootPart") then
         local root = LockedTarget.HumanoidRootPart
-        local targetPos = root.Position + Vector3.new(0, 1.5, 0)
+        local camPos = Camera.CFrame.Position
+        local lookPos = root.Position + Vector3.new(0, 1.5, 0)
 
-        local newCFrame = CFrame.new(
-            Camera.CFrame.Position,
-            Camera.CFrame.Position:Lerp(targetPos, SMOOTHNESS)
-        )
-
-        Camera.CFrame = newCFrame
+        local desired = CFrame.new(camPos, lookPos)
+        Camera.CFrame = Camera.CFrame:Lerp(desired, SMOOTHNESS)
     end
 end)
 
--- INPUT (MOBILE + PC)
+-- ================= INPUT =================
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then return end
 
-    -- Mobile (toque)
-    if input.UserInputType == Enum.UserInputType.Touch then
-        LockEnabled = not LockEnabled
+    if input.UserInputType == Enum.UserInputType.Touch
+        or input.KeyCode == Enum.KeyCode.Q then
 
-        if LockEnabled then
-            LockedTarget = getClosestTarget()
-        else
-            LockedTarget = nil
-        end
-    end
-
-    -- PC (Q)
-    if input.KeyCode == Enum.KeyCode.Q then
         LockEnabled = not LockEnabled
 
         if LockEnabled then
@@ -125,5 +114,21 @@ UserInputService.InputBegan:Connect(function(input, gp)
     end
 end)
 
--- FEEDBACK
+-- ================= MORTE / RESET =================
+local function onCharacter(char)
+    local hum = char:WaitForChild("Humanoid")
+
+    hum.Died:Connect(function()
+        LockEnabled = false
+        LockedTarget = nil
+    end)
+end
+
+if LocalPlayer.Character then
+    onCharacter(LocalPlayer.Character)
+end
+
+LocalPlayer.CharacterAdded:Connect(onCharacter)
+
+-- ================= FINAL =================
 warn("[LockOn Mobile] Carregado com sucesso 🔥")
