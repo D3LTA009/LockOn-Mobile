@@ -1,11 +1,15 @@
--- LockOn Mobile - FINAL COM BOTÃO (ESTÁVEL)
--- by D3LTA
+--[[ 
+ LockOn Mobile - FINAL DEFINITIVO
+ Estilo console | Mobile | Estável
+ by D3LTA
+]]
 
-warn("[LockOn] Script carregando...")
+warn("[LockOn] Iniciando...")
 
 -- ================= CONFIG =================
-local LOCK_RANGE = 200
-local SMOOTHNESS = 0.15 -- menor = acompanha dash melhor
+local LOCK_RANGE = 220
+local SMOOTHNESS = 0.12
+local CAMERA_DISTANCE = 6
 local IGNORE_TODO_ULT = true
 
 -- ================= SERVICES =================
@@ -19,8 +23,9 @@ repeat task.wait() until LocalPlayer.Character
 -- ================= STATE =================
 local LockedTarget = nil
 local LockEnabled = false
+local Indicator = nil
 
--- ================= UI (BOTÃO) =================
+-- ================= UI =================
 local gui = Instance.new("ScreenGui")
 gui.Name = "LockOnUI"
 gui.ResetOnSpawn = false
@@ -30,78 +35,86 @@ local button = Instance.new("TextButton")
 button.Size = UDim2.fromScale(0.18, 0.08)
 button.Position = UDim2.fromScale(0.75, 0.75)
 button.Text = "LOCK"
-button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-button.TextColor3 = Color3.fromRGB(255, 0, 0)
 button.TextScaled = true
+button.BackgroundColor3 = Color3.fromRGB(25,25,25)
+button.TextColor3 = Color3.fromRGB(255,0,0)
 button.Active = true
 button.Draggable = true
 button.Parent = gui
 
 -- ================= FUNÇÕES =================
 local function isSameTeam(player)
-    if not player or not player.Team or not LocalPlayer.Team then return false end
-    return player.Team == LocalPlayer.Team
+    return player and LocalPlayer.Team and player.Team == LocalPlayer.Team
 end
 
-local function isTodoUlt(character)
-    if not IGNORE_TODO_ULT or not character then return false end
-    if character.Name and character.Name:lower():find("todo") then
-        return true
-    end
-    return false
+local function isTodoUlt(model)
+    if not IGNORE_TODO_ULT or not model then return false end
+    return model.Name:lower():find("todo") and not Players:GetPlayerFromCharacter(model)
 end
 
 local function isValidTarget(model)
-    if not model then return false end
-    if model == LocalPlayer.Character then return false end
+    if not model or model == LocalPlayer.Character then return false end
 
-    local humanoid = model:FindFirstChildOfClass("Humanoid")
+    local hum = model:FindFirstChildOfClass("Humanoid")
     local root = model:FindFirstChild("HumanoidRootPart")
-    if not humanoid or humanoid.Health <= 0 or not root then
-        return false
-    end
+    if not hum or hum.Health <= 0 or not root then return false end
 
-    local player = Players:GetPlayerFromCharacter(model)
-    if player and isSameTeam(player) then
-        return false
-    end
+    local plr = Players:GetPlayerFromCharacter(model)
+    if plr and isSameTeam(plr) then return false end
 
-    if isTodoUlt(model) then
-        return false
-    end
+    if isTodoUlt(model) then return false end
 
     return true
 end
 
 local function getClosestTarget()
-    local closest = nil
-    local shortest = LOCK_RANGE
-
-    for _, obj in ipairs(workspace:GetChildren()) do
+    local closest, dist = nil, LOCK_RANGE
+    for _,obj in ipairs(workspace:GetChildren()) do
         if obj:IsA("Model") and isValidTarget(obj) then
             local root = obj:FindFirstChild("HumanoidRootPart")
-            if root then
-                local dist = (Camera.CFrame.Position - root.Position).Magnitude
-                if dist < shortest then
-                    shortest = dist
-                    closest = obj
-                end
+            local d = (Camera.CFrame.Position - root.Position).Magnitude
+            if d < dist then
+                dist = d
+                closest = obj
             end
         end
     end
-
     return closest
 end
 
--- ================= CAMERA LOCK =================
+-- ================= INDICADOR =================
+local function createIndicator(target)
+    if Indicator then Indicator:Destroy() end
+    local box = Instance.new("SelectionBox")
+    box.Adornee = target
+    box.LineThickness = 0.05
+    box.Color3 = Color3.fromRGB(255,255,255)
+    box.Parent = target
+    Indicator = box
+end
+
+local function clearIndicator()
+    if Indicator then
+        Indicator:Destroy()
+        Indicator = nil
+    end
+end
+
+-- ================= CAMERA =================
 RunService.RenderStepped:Connect(function()
     if LockEnabled and LockedTarget and LockedTarget:FindFirstChild("HumanoidRootPart") then
         local root = LockedTarget.HumanoidRootPart
-        local camPos = Camera.CFrame.Position
-        local lookPos = root.Position + Vector3.new(0, 1.5, 0)
+        local char = LocalPlayer.Character
+        if not char or not char:FindFirstChild("HumanoidRootPart") then return end
 
-        local desired = CFrame.new(camPos, lookPos)
-        Camera.CFrame = Camera.CFrame:Lerp(desired, SMOOTHNESS)
+        local myRoot = char.HumanoidRootPart
+        local camPos = myRoot.Position - (myRoot.CFrame.LookVector * CAMERA_DISTANCE) + Vector3.new(0,2,0)
+        local lookAt = root.Position + Vector3.new(0,1.5,0)
+
+        Camera.CFrame = Camera.CFrame:Lerp(
+            CFrame.new(camPos, lookAt),
+            SMOOTHNESS
+        )
     end
 end)
 
@@ -111,31 +124,34 @@ button.MouseButton1Click:Connect(function()
 
     if LockEnabled then
         LockedTarget = getClosestTarget()
-        button.Text = "LOCK ON"
-        button.TextColor3 = Color3.fromRGB(0, 255, 0)
+        if LockedTarget then
+            createIndicator(LockedTarget)
+            button.Text = "LOCK ON"
+            button.TextColor3 = Color3.fromRGB(0,255,0)
+        else
+            LockEnabled = false
+        end
     else
         LockedTarget = nil
+        clearIndicator()
         button.Text = "LOCK"
-        button.TextColor3 = Color3.fromRGB(255, 0, 0)
+        button.TextColor3 = Color3.fromRGB(255,0,0)
     end
 end)
 
 -- ================= MORTE / RESET =================
 local function onCharacter(char)
     local hum = char:WaitForChild("Humanoid")
-
     hum.Died:Connect(function()
         LockEnabled = false
         LockedTarget = nil
+        clearIndicator()
         button.Text = "LOCK"
-        button.TextColor3 = Color3.fromRGB(255, 0, 0)
+        button.TextColor3 = Color3.fromRGB(255,0,0)
     end)
 end
 
-if LocalPlayer.Character then
-    onCharacter(LocalPlayer.Character)
-end
-
+onCharacter(LocalPlayer.Character)
 LocalPlayer.CharacterAdded:Connect(onCharacter)
 
-warn("[LockOn Mobile] Carregado com sucesso 🔥")
+warn("[LockOn] Carregado com sucesso 🔥")
