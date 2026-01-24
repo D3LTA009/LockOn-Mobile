@@ -10,7 +10,7 @@ local LP = Players.LocalPlayer
 
 -- ================= CONFIG =================
 local AUTH_URL = "https://raw.githubusercontent.com/D3LTA009/LockOn-Mobile/refs/heads/main/auth.txt"
-local LINKVERTISE_URL = "COLE_AQUI_SEU_LINKVERTISE"
+local LINKVERTISE_URL = "https://link-hub.net/3053424/bnME7R5BTulk"
 
 -- ================= KEY CHECK =================
 local function checkKey(inputKey)
