@@ -1,157 +1,231 @@
---[[ 
- LockOn Mobile - FINAL DEFINITIVO
- Estilo console | Mobile | Estável
- by D3LTA
+--[[
+ Lock On Mobile - FINAL
+ - DUMMY SEMPRE FUNCIONA
+ - IGNORA APENAS NPC DA ULT DO TODO
+ - IGNORA MESMO TIME
+ - ALTA PRECISÃO (DASH / PREDICTION)
 ]]
 
-warn("[LockOn] Iniciando...")
-
--- ================= CONFIG =================
-local LOCK_RANGE = 220
-local SMOOTHNESS = 0.12
-local CAMERA_DISTANCE = 6
-local IGNORE_TODO_ULT = true
-
--- ================= SERVICES =================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local Camera = workspace.CurrentCamera
 
-local LocalPlayer = Players.LocalPlayer
-repeat task.wait() until LocalPlayer.Character
+local LP = Players.LocalPlayer
 
--- ================= STATE =================
-local LockedTarget = nil
-local LockEnabled = false
-local Indicator = nil
+-- =============================
+-- CONFIG
+-- =============================
+local LOCK_RANGE = 120
+local CAMERA_DISTANCE = 13
+local CAMERA_HEIGHT = 3.5
+local SMOOTHNESS = 0.18
 
--- ================= UI =================
-local gui = Instance.new("ScreenGui")
-gui.Name = "LockOnUI"
-gui.ResetOnSpawn = false
-gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+local PREDICTION_TIME = 0.18
+local DASH_SENSITIVITY = 0.35
+local MIN_CAM_DISTANCE = 11
 
-local button = Instance.new("TextButton")
-button.Size = UDim2.fromScale(0.18, 0.08)
-button.Position = UDim2.fromScale(0.75, 0.75)
-button.Text = "LOCK"
-button.TextScaled = true
-button.BackgroundColor3 = Color3.fromRGB(25,25,25)
-button.TextColor3 = Color3.fromRGB(255,0,0)
-button.Active = true
-button.Draggable = true
-button.Parent = gui
+-- =============================
+-- VARIÁVEIS
+-- =============================
+local Char, HRP, Humanoid
+local lockOn = false
+local targetHRP
+local ring
+local currentCF = Camera.CFrame
 
--- ================= FUNÇÕES =================
-local function isSameTeam(player)
-    return player and LocalPlayer.Team and player.Team == LocalPlayer.Team
+-- =============================
+-- DESLIGAR LOCK
+-- =============================
+local function disableLock()
+    lockOn = false
+    targetHRP = nil
+    if ring then ring:Destroy() ring = nil end
+    Camera.CameraType = Enum.CameraType.Custom
 end
 
-local function isTodoUlt(model)
-    if not IGNORE_TODO_ULT or not model then return false end
-    return model.Name:lower():find("todo") and not Players:GetPlayerFromCharacter(model)
+-- =============================
+-- IDENTIFICAR DUMMY (WHITELIST)
+-- =============================
+local function isDummy(model)
+    local name = model.Name:lower()
+    if name:find("dummy") or name:find("training") then
+        return true
+    end
+    return false
 end
 
-local function isValidTarget(model)
-    if not model or model == LocalPlayer.Character then return false end
+-- =============================
+-- IDENTIFICAR NPC DA ULT DO TODO
+-- =============================
+local function isTodoUltNPC(model)
+    if model == Char or not HRP then return true end
+
+    -- ❗ SE FOR DUMMY, NUNCA IGNORA
+    if isDummy(model) then
+        return false
+    end
+
+    -- nunca bloquear players
+    if Players:GetPlayerFromCharacter(model) then
+        return false
+    end
 
     local hum = model:FindFirstChildOfClass("Humanoid")
-    local root = model:FindFirstChild("HumanoidRootPart")
-    if not hum or hum.Health <= 0 or not root then return false end
+    local hrp = model:FindFirstChild("HumanoidRootPart")
+    if not hum or not hrp then return false end
 
-    local plr = Players:GetPlayerFromCharacter(model)
-    if plr and isSameTeam(plr) then return false end
+    -- NPC da ult do Todo: segue + voa + fica colado
+    if (hrp.Position - HRP.Position).Magnitude < 6 then
+        return true
+    end
 
-    if isTodoUlt(model) then return false end
+    if hum.FloorMaterial == Enum.Material.Air then
+        return true
+    end
 
-    return true
+    if hum.AutoRotate == false then
+        return true
+    end
+
+    if hrp.CanCollide == false then
+        return true
+    end
+
+    return false
 end
 
+-- =============================
+-- IGNORAR MESMO TIME
+-- =============================
+local function isSameTeam(model)
+    local plr = Players:GetPlayerFromCharacter(model)
+    if plr and LP.Team then
+        return plr.Team == LP.Team
+    end
+    return false
+end
+
+-- =============================
+-- ACHAR ALVO
+-- =============================
 local function getClosestTarget()
-    local closest, dist = nil, LOCK_RANGE
-    for _,obj in ipairs(workspace:GetChildren()) do
-        if obj:IsA("Model") and isValidTarget(obj) then
-            local root = obj:FindFirstChild("HumanoidRootPart")
-            local d = (Camera.CFrame.Position - root.Position).Magnitude
-            if d < dist then
-                dist = d
-                closest = obj
+    if not HRP then return nil end
+
+    local closest, shortest = nil, LOCK_RANGE
+
+    for _, m in ipairs(workspace:GetDescendants()) do
+        if m:IsA("Model") and not isTodoUltNPC(m) and not isSameTeam(m) then
+            local hum = m:FindFirstChildOfClass("Humanoid")
+            local hrp = m:FindFirstChild("HumanoidRootPart")
+
+            if hum and hrp and hum.Health > 0 then
+                local dist = (HRP.Position - hrp.Position).Magnitude
+                if dist < shortest then
+                    shortest = dist
+                    closest = hrp
+                end
             end
         end
     end
+
     return closest
 end
 
--- ================= INDICADOR =================
-local function createIndicator(target)
-    if Indicator then Indicator:Destroy() end
-    local box = Instance.new("SelectionBox")
-    box.Adornee = target
-    box.LineThickness = 0.05
-    box.Color3 = Color3.fromRGB(255,255,255)
-    box.Parent = target
-    Indicator = box
+-- =============================
+-- INDICADOR
+-- =============================
+local function createRing(model)
+    if ring then ring:Destroy() end
+    ring = Instance.new("SelectionBox")
+    ring.Adornee = model
+    ring.LineThickness = 0.06
+    ring.Color3 = Color3.fromRGB(255,0,0)
+    ring.SurfaceTransparency = 1
+    ring.Parent = game.CoreGui
 end
 
-local function clearIndicator()
-    if Indicator then
-        Indicator:Destroy()
-        Indicator = nil
+-- =============================
+-- CÂMERA (PRECISA)
+-- =============================
+RunService.RenderStepped:Connect(function(dt)
+    if not lockOn or not targetHRP or not HRP then return end
+    if not targetHRP.Parent then disableLock() return end
+
+    local hum = targetHRP.Parent:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then
+        disableLock()
+        return
     end
-end
 
--- ================= CAMERA =================
-RunService.RenderStepped:Connect(function()
-    if LockEnabled and LockedTarget and LockedTarget:FindFirstChild("HumanoidRootPart") then
-        local root = LockedTarget.HumanoidRootPart
-        local char = LocalPlayer.Character
-        if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    Camera.CameraType = Enum.CameraType.Scriptable
 
-        local myRoot = char.HumanoidRootPart
-        local camPos = myRoot.Position - (myRoot.CFrame.LookVector * CAMERA_DISTANCE) + Vector3.new(0,2,0)
-        local lookAt = root.Position + Vector3.new(0,1.5,0)
+    local vel = targetHRP.AssemblyLinearVelocity
+    local predicted = targetHRP.Position + vel * PREDICTION_TIME
 
-        Camera.CFrame = Camera.CFrame:Lerp(
-            CFrame.new(camPos, lookAt),
-            SMOOTHNESS
-        )
-    end
+    local dir = predicted - HRP.Position
+    local dist = math.max(dir.Magnitude, MIN_CAM_DISTANCE)
+    local camPos =
+        HRP.Position
+        - dir.Unit * math.clamp(dist, MIN_CAM_DISTANCE, CAMERA_DISTANCE)
+        + Vector3.new(0, CAMERA_HEIGHT, 0)
+
+    local lookPos = predicted + Vector3.new(0,1.4,0)
+
+    local lerpAlpha = math.clamp(
+        SMOOTHNESS + (vel.Magnitude * DASH_SENSITIVITY * dt),
+        SMOOTHNESS,
+        0.45
+    )
+
+    currentCF = currentCF:Lerp(CFrame.new(camPos, lookPos), lerpAlpha)
+    Camera.CFrame = currentCF
 end)
 
--- ================= BOTÃO =================
-button.MouseButton1Click:Connect(function()
-    LockEnabled = not LockEnabled
+-- =============================
+-- GUI MOBILE
+-- =============================
+local gui = Instance.new("ScreenGui", game.CoreGui)
+local btn = Instance.new("TextButton", gui)
 
-    if LockEnabled then
-        LockedTarget = getClosestTarget()
-        if LockedTarget then
-            createIndicator(LockedTarget)
-            button.Text = "LOCK ON"
-            button.TextColor3 = Color3.fromRGB(0,255,0)
+btn.Size = UDim2.new(0,140,0,50)
+btn.Position = UDim2.new(0.7,0,0.75,0)
+btn.Text = "LOCK OFF"
+btn.TextScaled = true
+btn.BackgroundColor3 = Color3.fromRGB(30,30,30)
+btn.TextColor3 = Color3.fromRGB(255,255,255)
+btn.BorderSizePixel = 0
+Instance.new("UICorner", btn).CornerRadius = UDim.new(0,12)
+
+btn.MouseButton1Click:Connect(function()
+    lockOn = not lockOn
+    if lockOn then
+        targetHRP = getClosestTarget()
+        if targetHRP then
+            createRing(targetHRP.Parent)
+            currentCF = Camera.CFrame
+            btn.Text = "LOCK ON"
+            btn.BackgroundColor3 = Color3.fromRGB(170,0,0)
         else
-            LockEnabled = false
+            lockOn = false
         end
     else
-        LockedTarget = nil
-        clearIndicator()
-        button.Text = "LOCK"
-        button.TextColor3 = Color3.fromRGB(255,0,0)
+        disableLock()
+        btn.Text = "LOCK OFF"
+        btn.BackgroundColor3 = Color3.fromRGB(30,30,30)
     end
 end)
 
--- ================= MORTE / RESET =================
+-- =============================
+-- CHARACTER
+-- =============================
 local function onCharacter(char)
-    local hum = char:WaitForChild("Humanoid")
-    hum.Died:Connect(function()
-        LockEnabled = false
-        LockedTarget = nil
-        clearIndicator()
-        button.Text = "LOCK"
-        button.TextColor3 = Color3.fromRGB(255,0,0)
-    end)
+    Char = char
+    HRP = char:WaitForChild("HumanoidRootPart")
+    Humanoid = char:WaitForChild("Humanoid")
+    disableLock()
+    Humanoid.Died:Connect(disableLock)
 end
 
-onCharacter(LocalPlayer.Character)
-LocalPlayer.CharacterAdded:Connect(onCharacter)
-
-warn("[LockOn] Carregado com sucesso 🔥")
+if LP.Character then onCharacter(LP.Character) end
+LP.CharacterAdded:Connect(onCharacter)
