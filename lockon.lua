@@ -1,15 +1,13 @@
--- SISTEMA DE ATIVAÇÃO REMOTA (GITHUB)
-
-local AUTH_URL = "https://raw.githubusercontent.com/D3LTA009/LockOn-Mobile/main/auth.txt"
-
 local success, response = pcall(function()
-    return game:HttpGet(AUTH_URL)
+    return game:HttpGet(AUTH_URL, true) -- true ignora cache
 end)
 
 if not success then
     warn("Não foi possível verificar o script")
     return
 end
+
+response = response:upper() -- garante que ON ou OFF funcione independente de maiúscula/minúscula
 
 if not string.find(response, "ON") then
     warn("Script desativado pelo criador")
