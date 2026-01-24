@@ -1,4 +1,4 @@
--- LockOn Mobile - estilo console (FINAL)
+-- LockOn Mobile - FINAL COM BOTÃO (ESTÁVEL)
 -- by D3LTA
 
 warn("[LockOn] Script carregando...")
@@ -11,19 +11,33 @@ local IGNORE_TODO_ULT = true
 -- ================= SERVICES =================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 local Camera = workspace.CurrentCamera
 
 local LocalPlayer = Players.LocalPlayer
-
 repeat task.wait() until LocalPlayer.Character
 
 -- ================= STATE =================
 local LockedTarget = nil
 local LockEnabled = false
 
--- ================= FUNÇÕES =================
+-- ================= UI (BOTÃO) =================
+local gui = Instance.new("ScreenGui")
+gui.Name = "LockOnUI"
+gui.ResetOnSpawn = false
+gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
+local button = Instance.new("TextButton")
+button.Size = UDim2.fromScale(0.18, 0.08)
+button.Position = UDim2.fromScale(0.75, 0.75)
+button.Text = "LOCK"
+button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+button.TextColor3 = Color3.fromRGB(255, 0, 0)
+button.TextScaled = true
+button.Active = true
+button.Draggable = true
+button.Parent = gui
+
+-- ================= FUNÇÕES =================
 local function isSameTeam(player)
     if not player or not player.Team or not LocalPlayer.Team then return false end
     return player.Team == LocalPlayer.Team
@@ -31,15 +45,10 @@ end
 
 local function isTodoUlt(character)
     if not IGNORE_TODO_ULT or not character then return false end
-
-    -- nomes comuns de NPC / ult
     if character.Name and character.Name:lower():find("todo") then
         return true
     end
-
-    return character:FindFirstChild("TodoUlt")
-        or character:FindFirstChild("IceDomain")
-        or character:FindFirstChild("UltActive")
+    return false
 end
 
 local function isValidTarget(model)
@@ -48,7 +57,6 @@ local function isValidTarget(model)
 
     local humanoid = model:FindFirstChildOfClass("Humanoid")
     local root = model:FindFirstChild("HumanoidRootPart")
-
     if not humanoid or humanoid.Health <= 0 or not root then
         return false
     end
@@ -97,20 +105,18 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ================= INPUT =================
-UserInputService.InputBegan:Connect(function(input, gp)
-    if gp then return end
+-- ================= BOTÃO =================
+button.MouseButton1Click:Connect(function()
+    LockEnabled = not LockEnabled
 
-    if input.UserInputType == Enum.UserInputType.Touch
-        or input.KeyCode == Enum.KeyCode.Q then
-
-        LockEnabled = not LockEnabled
-
-        if LockEnabled then
-            LockedTarget = getClosestTarget()
-        else
-            LockedTarget = nil
-        end
+    if LockEnabled then
+        LockedTarget = getClosestTarget()
+        button.Text = "LOCK ON"
+        button.TextColor3 = Color3.fromRGB(0, 255, 0)
+    else
+        LockedTarget = nil
+        button.Text = "LOCK"
+        button.TextColor3 = Color3.fromRGB(255, 0, 0)
     end
 end)
 
@@ -121,6 +127,8 @@ local function onCharacter(char)
     hum.Died:Connect(function()
         LockEnabled = false
         LockedTarget = nil
+        button.Text = "LOCK"
+        button.TextColor3 = Color3.fromRGB(255, 0, 0)
     end)
 end
 
@@ -130,5 +138,4 @@ end
 
 LocalPlayer.CharacterAdded:Connect(onCharacter)
 
--- ================= FINAL =================
 warn("[LockOn Mobile] Carregado com sucesso 🔥")
