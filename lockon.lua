@@ -14,7 +14,7 @@ local LINKVERTISE_URL = "https://link-hub.net/3053424/bnME7R5BTulk"
 
 -- ================= KEY CHECK =================
 local function checkKey(inputKey)
-    local data = game:HttpGet(AUTH_URL)
+    local data = game:HttpGet(AUTH_URL, true) -- pega o raw e ignora cache
 
     if not data:find("STATUS=ON") then
         return false, "Script desligado"
@@ -101,25 +101,11 @@ end)
 
 -- ================= BLOQUEIO =================
 repeat task.wait() until _G.KEY_OK
---[[
- Lock On Mobile - HUD estilo console (FINAL)
- - DUMMY SEMPRE FUNCIONA
- - IGNORA NPC DA ULT DO TODO
- - IGNORA MESMO TIME
- - HUD pequeno e transparente
- - INDICADOR SÓ CONTORNO (transparente)
- - ALTA PRECISÃO (dash/prediction)
-]]
 
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local Camera = workspace.CurrentCamera
-
+-- ================= HUD LOCK ON =================
 local LP = Players.LocalPlayer
 repeat task.wait() until LP.Character
 
--- ================= CONFIG =================
 local LOCK_RANGE = 120
 local CAMERA_DISTANCE = 13
 local CAMERA_HEIGHT = 3.5
@@ -128,14 +114,12 @@ local PREDICTION_TIME = 0.18
 local DASH_SENSITIVITY = 0.35
 local MIN_CAM_DISTANCE = 11
 
--- ================= STATE =================
 local Char, HRP, Humanoid
 local lockOn = false
 local targetHRP
 local ring
 local currentCF = Camera.CFrame
 
--- ================= FUNÇÕES LOCK =================
 local function disableLock()
     lockOn = false
     targetHRP = nil
@@ -187,22 +171,21 @@ local function getClosestTarget()
     return closest
 end
 
--- ================= INDICADOR =================
 local function createRing(model)
     if ring then ring:Destroy() end
     ring = Instance.new("SelectionBox")
     ring.Adornee = model
     ring.LineThickness = 0.06
     ring.Color3 = Color3.fromRGB(255,0,0)
-    ring.SurfaceTransparency = 1 -- interior totalmente transparente
+    ring.SurfaceTransparency = 1
     ring.Parent = game.CoreGui
 end
 
 -- ================= HUD =================
-local gui = Instance.new("ScreenGui", game.CoreGui)
-gui.Name = "LockOnHUD"
+local guiHUD = Instance.new("ScreenGui", game.CoreGui)
+guiHUD.Name = "LockOnHUD"
 
-local infoFrame = Instance.new("Frame", gui)
+local infoFrame = Instance.new("Frame", guiHUD)
 infoFrame.Size = UDim2.new(0,140,0,50)
 infoFrame.Position = UDim2.new(0.75,0,0.05,0)
 infoFrame.BackgroundColor3 = Color3.fromRGB(0,0,0)
@@ -234,7 +217,6 @@ distLabel.TextColor3 = Color3.fromRGB(255,255,255)
 distLabel.TextScaled = true
 distLabel.Text = "Dist"
 
--- ================= CAMERA =================
 RunService.RenderStepped:Connect(function(dt)
     if not lockOn or not targetHRP or not HRP then return end
     if not targetHRP.Parent then disableLock() return end
@@ -254,7 +236,6 @@ RunService.RenderStepped:Connect(function(dt)
     local lerpAlpha = math.clamp(SMOOTHNESS + (vel.Magnitude * DASH_SENSITIVITY * dt), SMOOTHNESS,0.45)
     Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(camPos,lookPos), lerpAlpha)
 
-    -- atualizar HUD
     if targetHRP then
         local targetHum = targetHRP.Parent:FindFirstChildOfClass("Humanoid")
         infoFrame.Visible = true
@@ -265,7 +246,7 @@ RunService.RenderStepped:Connect(function(dt)
 end)
 
 -- ================= BOTÃO =================
-local btn = Instance.new("TextButton", gui)
+local btn = Instance.new("TextButton", guiHUD)
 btn.Size = UDim2.new(0,120,0,40)
 btn.Position = UDim2.new(0.75,0,0.85,0)
 btn.Text = "LOCK OFF"
@@ -296,12 +277,18 @@ btn.MouseButton1Click:Connect(function()
     end
 end)
 
--- ================= CHARACTER =================
 local function onCharacter(char)
     Char = char
     HRP = char:WaitForChild("HumanoidRootPart")
     Humanoid = char:WaitForChild("Humanoid")
     disableLock()
+    Humanoid.Died:Connect(disableLock)
+end
+
+if LP.Character then onCharacter(LP.Character) end
+LP.CharacterAdded:Connect(onCharacter)
+
+warn("[LockOn HUD] Carregado ✅ Transparente e minimalista")Lock()
     Humanoid.Died:Connect(disableLock)
 end
 
