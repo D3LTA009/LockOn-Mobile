@@ -9,7 +9,7 @@ local Camera = workspace.CurrentCamera
 local LP = Players.LocalPlayer
 
 -- ================= CONFIG =================
-local AUTH_URL = "https://raw.githubusercontent.com/D3LTA009/LockOn-Mobile/refs/heads/main/auth.txt"
+local AUTH_URL = "https://raw.githubusercontent.com/D3LTA009/LockOn-Mobile/main/auth.txt"
 local LINKVERTISE_URL = "https://link-hub.net/3053424/bnME7R5BTulk"
 
 -- ================= KEY CHECK =================
